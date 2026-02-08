@@ -5,7 +5,7 @@ import { CodePreview } from './CodePreview';
 
 interface EntryEditorProps {
   entry?: BlogEntry | null;
-  onSave: (entry: Omit<BlogEntry, 'id' | 'createdAt'>) => void;
+  onSave: (entry: { title: string; language: Language; code: string; summary: string; reflection: string; tags: string[]; date: string }) => void;
   onCancel: () => void;
 }
 
@@ -41,15 +41,12 @@ export function EntryEditor({ entry, onSave, onCancel }: EntryEditorProps) {
       code,
       summary: summary.trim(),
       reflection: reflection.trim(),
-      tags: tags
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean),
+      tags: tags.split(',').map(t => t.trim()).filter(Boolean),
       date,
     });
   }
 
-  const selectedLang = LANGUAGES.find((l) => l.value === language)!;
+  const selectedLang = LANGUAGES.find(l => l.value === language)!;
 
   return (
     <div className="h-full flex flex-col bg-[#0d1117]">
@@ -89,41 +86,35 @@ export function EntryEditor({ entry, onSave, onCancel }: EntryEditorProps) {
           {/* Left: Editor */}
           <div className={`flex flex-col ${showPreview ? 'border-r border-gray-800' : ''} overflow-y-auto`}>
             <div className="p-6 space-y-5">
-              {/* Title + Date Row */}
+              {/* Title + Date */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
-                    Title
-                  </label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Title</label>
                   <input
                     type="text"
                     value={title}
-                    onChange={(e) => setTitle(e.target.value)}
+                    onChange={e => setTitle(e.target.value)}
                     placeholder="What did you learn today?"
-                    className="w-full bg-[#161b22] text-white px-4 py-2.5 rounded-xl border border-gray-800 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 placeholder-gray-600 text-sm transition-colors"
+                    className="w-full bg-[#161b22] text-white px-4 py-2.5 rounded-xl border border-gray-800 focus:border-emerald-500/50 focus:outline-none placeholder-gray-600 text-sm transition-colors"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
-                    Date
-                  </label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">Date</label>
                   <input
                     type="date"
                     value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full bg-[#161b22] text-white px-4 py-2.5 rounded-xl border border-gray-800 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 text-sm transition-colors [color-scheme:dark]"
+                    onChange={e => setDate(e.target.value)}
+                    className="w-full bg-[#161b22] text-white px-4 py-2.5 rounded-xl border border-gray-800 focus:border-emerald-500/50 focus:outline-none text-sm transition-colors [color-scheme:dark]"
                   />
                 </div>
               </div>
 
-              {/* Language Selector */}
+              {/* Language */}
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">
-                  Language
-                </label>
+                <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">Language</label>
                 <div className="flex flex-wrap gap-2">
-                  {LANGUAGES.map((lang) => (
+                  {LANGUAGES.map(lang => (
                     <button
                       key={lang.value}
                       type="button"
@@ -133,16 +124,12 @@ export function EntryEditor({ entry, onSave, onCancel }: EntryEditorProps) {
                           ? 'border-2 shadow-lg scale-105'
                           : 'border border-gray-800 text-gray-500 hover:border-gray-600 hover:text-gray-300'
                       }`}
-                      style={
-                        language === lang.value
-                          ? {
-                              borderColor: lang.color,
-                              backgroundColor: `${lang.color}15`,
-                              color: lang.color,
-                              boxShadow: `0 4px 15px ${lang.color}20`,
-                            }
-                          : {}
-                      }
+                      style={language === lang.value ? {
+                        borderColor: lang.color,
+                        backgroundColor: `${lang.color}15`,
+                        color: lang.color,
+                        boxShadow: `0 4px 15px ${lang.color}20`,
+                      } : {}}
                     >
                       <span className="text-sm">{lang.icon}</span>
                       {lang.label}
@@ -151,20 +138,15 @@ export function EntryEditor({ entry, onSave, onCancel }: EntryEditorProps) {
                 </div>
               </div>
 
-              {/* Code Editor */}
+              {/* Code */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Code
-                  </label>
-                  <span
-                    className="text-xs px-2 py-0.5 rounded-md font-medium"
-                    style={{ backgroundColor: `${selectedLang.color}20`, color: selectedLang.color }}
-                  >
+                  <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider">Code</label>
+                  <span className="text-xs px-2 py-0.5 rounded-md font-medium" style={{ backgroundColor: `${selectedLang.color}20`, color: selectedLang.color }}>
                     {selectedLang.label}
                   </span>
                 </div>
-                <div className="relative rounded-xl overflow-hidden border border-gray-800 focus-within:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/20 transition-colors">
+                <div className="relative rounded-xl overflow-hidden border border-gray-800 focus-within:border-emerald-500/50 transition-colors">
                   <div className="flex items-center gap-1.5 px-4 py-2 bg-[#1c2333] border-b border-gray-800/50">
                     <div className="w-3 h-3 rounded-full bg-red-500/60"></div>
                     <div className="w-3 h-3 rounded-full bg-yellow-500/60"></div>
@@ -173,7 +155,7 @@ export function EntryEditor({ entry, onSave, onCancel }: EntryEditorProps) {
                   </div>
                   <textarea
                     value={code}
-                    onChange={(e) => setCode(e.target.value)}
+                    onChange={e => setCode(e.target.value)}
                     placeholder={`// Write your ${selectedLang.label} code here...\n`}
                     className="w-full bg-[#0d1117] text-gray-300 px-4 py-3 font-mono text-sm leading-relaxed resize-none focus:outline-none placeholder-gray-700 min-h-[250px]"
                     rows={14}
@@ -189,28 +171,24 @@ export function EntryEditor({ entry, onSave, onCancel }: EntryEditorProps) {
 
               {/* Summary */}
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
-                  📝 What I Learned
-                </label>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">📝 What I Learned</label>
                 <textarea
                   value={summary}
-                  onChange={(e) => setSummary(e.target.value)}
+                  onChange={e => setSummary(e.target.value)}
                   placeholder="Summarize what you learned today..."
-                  className="w-full bg-[#161b22] text-gray-300 px-4 py-3 rounded-xl border border-gray-800 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 placeholder-gray-600 text-sm leading-relaxed resize-none transition-colors"
+                  className="w-full bg-[#161b22] text-gray-300 px-4 py-3 rounded-xl border border-gray-800 focus:border-emerald-500/50 focus:outline-none placeholder-gray-600 text-sm leading-relaxed resize-none transition-colors"
                   rows={3}
                 />
               </div>
 
               {/* Reflection */}
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
-                  💡 How I Think This Code Is Used
-                </label>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">💡 How I Think This Code Is Used</label>
                 <textarea
                   value={reflection}
-                  onChange={(e) => setReflection(e.target.value)}
+                  onChange={e => setReflection(e.target.value)}
                   placeholder="How do you think this code is used in real-world applications?"
-                  className="w-full bg-[#161b22] text-gray-300 px-4 py-3 rounded-xl border border-gray-800 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 placeholder-gray-600 text-sm leading-relaxed resize-none transition-colors"
+                  className="w-full bg-[#161b22] text-gray-300 px-4 py-3 rounded-xl border border-gray-800 focus:border-emerald-500/50 focus:outline-none placeholder-gray-600 text-sm leading-relaxed resize-none transition-colors"
                   rows={3}
                 />
               </div>
@@ -218,20 +196,19 @@ export function EntryEditor({ entry, onSave, onCancel }: EntryEditorProps) {
               {/* Tags */}
               <div>
                 <label className="flex items-center gap-1.5 text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider">
-                  <Tag className="w-3 h-3" />
-                  Tags
+                  <Tag className="w-3 h-3" /> Tags
                 </label>
                 <input
                   type="text"
                   value={tags}
-                  onChange={(e) => setTags(e.target.value)}
+                  onChange={e => setTags(e.target.value)}
                   placeholder="arrays, loops, functions (comma separated)"
-                  className="w-full bg-[#161b22] text-gray-300 px-4 py-2.5 rounded-xl border border-gray-800 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 placeholder-gray-600 text-sm transition-colors"
+                  className="w-full bg-[#161b22] text-gray-300 px-4 py-2.5 rounded-xl border border-gray-800 focus:border-emerald-500/50 focus:outline-none placeholder-gray-600 text-sm transition-colors"
                 />
               </div>
             </div>
 
-            {/* Save Button */}
+            {/* Save */}
             <div className="sticky bottom-0 p-4 bg-[#0d1117] border-t border-gray-800">
               <button
                 type="submit"
