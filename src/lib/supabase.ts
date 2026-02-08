@@ -11,8 +11,8 @@
 // ──────────────────────────────────────────────────
 // import { createClient } from '@supabase/supabase-js';
 //
-// const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';   // ← paste your Project URL
-// const SUPABASE_ANON_KEY = 'eyJ...your-anon-key-here';         // ← paste your anon/public key
+// const SUPABASE_URL = 'https://uvtpsbvogdfvyudctfwr.supabase.co';   // ← paste your Project URL
+// const SUPABASE_ANON_KEY = 'eyJ...eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2dHBzYnZvZ2Rmdnl1ZGN0ZndyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1NjIwNjAsImV4cCI6MjA4NjEzODA2MH0.yvjJnbKDAjtKsUApOHkQLsj-ThLAdqIoFgmFHpF3LVM';  // ← paste your anon/public key
 //
 // export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // ──────────────────────────────────────────────────
