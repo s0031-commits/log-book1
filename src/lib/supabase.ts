@@ -11,8 +11,8 @@ import { createClient } from '@supabase/supabase-js';
 // ============================================================
 
 // 👇 PASTE KEYS HERE TO ENABLE BACKEND 👇
-const SUPABASE_URL = ''; 
-const SUPABASE_ANON_KEY = '';
+const SUPABASE_URL = 'https://uvtpsbvogdfvyudctfwr.supabase.co'; 
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2dHBzYnZvZ2Rmdnl1ZGN0ZndyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1NjIwNjAsImV4cCI6MjA4NjEzODA2MH0.yvjJnbKDAjtKsUApOHkQLsj-ThLAdqIoFgmFHpF3LVM';
 
 // Check if keys are configured
 export const isSupabaseConfigured = () => {
