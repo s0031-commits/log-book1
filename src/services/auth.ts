@@ -1,17 +1,8 @@
-// ============================================================
-// AUTH SERVICE
-// ============================================================
-// Currently uses localStorage. Replace with Supabase Auth calls.
-//
-// To migrate to Supabase:
-// 1. import { supabase } from '../lib/supabase';
-// 2. Replace each function body with the Supabase call shown in comments
-// ============================================================
-
 import { v4 as uuidv4 } from 'uuid';
 import { User, AVATAR_COLORS } from '../types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
-// ---------- localStorage helpers (remove when using Supabase) ----------
+// ---------- localStorage helpers ----------
 function getAccounts(): Record<string, { user: User; passwordHash: string }> {
   try {
     const data = localStorage.getItem('codelog_accounts');
@@ -33,7 +24,17 @@ function simpleHash(str: string): string {
   }
   return hash.toString(36);
 }
-// -----------------------------------------------------------------------
+
+// Map Supabase profile to User type
+function mapProfileToUser(profile: any): User {
+  return {
+    id: profile.id,
+    email: profile.email,
+    displayName: profile.display_name,
+    avatarColor: profile.avatar_color,
+    createdAt: new Date(profile.created_at).getTime(),
+  };
+}
 
 export interface AuthResult {
   success: boolean;
@@ -41,23 +42,49 @@ export interface AuthResult {
   error?: string;
 }
 
-/**
- * Sign up a new user
- *
- * TODO: Replace with Supabase:
- * const { data, error } = await supabase.auth.signUp({
- *   email,
- *   password,
- *   options: {
- *     data: { display_name: displayName, avatar_color: avatarColor }
- *   }
- * });
- */
 export async function signUp(
   email: string,
   password: string,
   displayName: string
 ): Promise<AuthResult> {
+  // ------------------------------------------------------------
+  // 🚀 SUPABASE MODE
+  // ------------------------------------------------------------
+  if (isSupabaseConfigured() && supabase) {
+    const avatarColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+    
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          display_name: displayName,
+          avatar_color: avatarColor,
+        },
+      },
+    });
+
+    if (error) return { success: false, error: error.message };
+    if (data.user) {
+      // We manually construct the user object because the trigger might take a ms to run
+      // In a real app we might wait or fetch the profile, but this is faster for UI
+      return { 
+        success: true, 
+        user: {
+          id: data.user.id,
+          email: email,
+          displayName: displayName,
+          avatarColor: avatarColor,
+          createdAt: Date.now()
+        }
+      };
+    }
+    return { success: false, error: 'Signup failed.' };
+  }
+
+  // ------------------------------------------------------------
+  // 💾 LOCALSTORAGE MODE
+  // ------------------------------------------------------------
   const normalizedEmail = email.toLowerCase().trim();
   const accounts = getAccounts();
 
@@ -84,13 +111,36 @@ export async function signUp(
   return { success: true, user: newUser };
 }
 
-/**
- * Sign in an existing user
- *
- * TODO: Replace with Supabase:
- * const { data, error } = await supabase.auth.signInWithPassword({ email, password });
- */
 export async function signIn(email: string, password: string): Promise<AuthResult> {
+  // ------------------------------------------------------------
+  // 🚀 SUPABASE MODE
+  // ------------------------------------------------------------
+  if (isSupabaseConfigured() && supabase) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) return { success: false, error: error.message };
+    
+    // Fetch profile to get display name and avatar
+    if (data.user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+      
+      if (profile) {
+        return { success: true, user: mapProfileToUser(profile) };
+      }
+    }
+    return { success: false, error: 'Login succeeded but profile not found.' };
+  }
+
+  // ------------------------------------------------------------
+  // 💾 LOCALSTORAGE MODE
+  // ------------------------------------------------------------
   const normalizedEmail = email.toLowerCase().trim();
   const accounts = getAccounts();
   const account = accounts[normalizedEmail];
@@ -106,31 +156,34 @@ export async function signIn(email: string, password: string): Promise<AuthResul
   return { success: true, user: account.user };
 }
 
-/**
- * Sign out the current user
- *
- * TODO: Replace with Supabase:
- * await supabase.auth.signOut();
- */
 export async function signOut(): Promise<void> {
-  localStorage.removeItem('codelog_session');
+  if (isSupabaseConfigured() && supabase) {
+    await supabase.auth.signOut();
+  } else {
+    localStorage.removeItem('codelog_session');
+  }
 }
 
-/**
- * Get the currently logged-in user (restore session)
- *
- * TODO: Replace with Supabase:
- * const { data: { user } } = await supabase.auth.getUser();
- * if (user) {
- *   const { data: profile } = await supabase
- *     .from('profiles')
- *     .select('*')
- *     .eq('id', user.id)
- *     .single();
- *   return mapProfileToUser(profile);
- * }
- */
 export async function getCurrentUser(): Promise<User | null> {
+  // ------------------------------------------------------------
+  // 🚀 SUPABASE MODE
+  // ------------------------------------------------------------
+  if (isSupabaseConfigured() && supabase) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return null;
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .single();
+
+    return profile ? mapProfileToUser(profile) : null;
+  }
+
+  // ------------------------------------------------------------
+  // 💾 LOCALSTORAGE MODE
+  // ------------------------------------------------------------
   const sessionUserId = localStorage.getItem('codelog_session');
   if (!sessionUserId) return null;
 
@@ -139,19 +192,28 @@ export async function getCurrentUser(): Promise<User | null> {
   return account?.user ?? null;
 }
 
-/**
- * Update user profile
- *
- * TODO: Replace with Supabase:
- * const { error } = await supabase
- *   .from('profiles')
- *   .update({ display_name: updates.displayName, avatar_color: updates.avatarColor })
- *   .eq('id', userId);
- */
 export async function updateProfile(
   userId: string,
   updates: Partial<Pick<User, 'displayName' | 'avatarColor'>>
 ): Promise<{ success: boolean; error?: string }> {
+  // ------------------------------------------------------------
+  // 🚀 SUPABASE MODE
+  // ------------------------------------------------------------
+  if (isSupabaseConfigured() && supabase) {
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        display_name: updates.displayName,
+        avatar_color: updates.avatarColor,
+      })
+      .eq('id', userId);
+
+    return { success: !error, error: error?.message };
+  }
+
+  // ------------------------------------------------------------
+  // 💾 LOCALSTORAGE MODE
+  // ------------------------------------------------------------
   const accounts = getAccounts();
   const account = Object.values(accounts).find(a => a.user.id === userId);
   if (!account) return { success: false, error: 'User not found' };
@@ -162,22 +224,30 @@ export async function updateProfile(
   return { success: true };
 }
 
-/**
- * Listen for auth state changes
- *
- * TODO: Replace with Supabase:
- * supabase.auth.onAuthStateChange((event, session) => {
- *   if (session?.user) {
- *     // Fetch profile and call callback
- *   } else {
- *     callback(null);
- *   }
- * });
- */
 export function onAuthStateChange(callback: (user: User | null) => void): () => void {
-  // For localStorage, we just check on init — no real-time subscription
-  getCurrentUser().then(callback);
+  // ------------------------------------------------------------
+  // 🚀 SUPABASE MODE
+  // ------------------------------------------------------------
+  if (isSupabaseConfigured() && supabase) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        // Fetch full profile
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        callback(profile ? mapProfileToUser(profile) : null);
+      } else {
+        callback(null);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }
 
-  // Return unsubscribe function (no-op for localStorage)
+  // ------------------------------------------------------------
+  // 💾 LOCALSTORAGE MODE
+  // ------------------------------------------------------------
+  getCurrentUser().then(callback);
   return () => {};
 }

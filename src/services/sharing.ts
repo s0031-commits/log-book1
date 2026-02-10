@@ -1,17 +1,8 @@
-// ============================================================
-// SHARING SERVICE
-// ============================================================
-// Currently uses localStorage. Replace with Supabase DB calls.
-//
-// To migrate to Supabase:
-// 1. import { supabase } from '../lib/supabase';
-// 2. Replace each function body with the Supabase queries in comments
-// ============================================================
-
 import { v4 as uuidv4 } from 'uuid';
 import { ShareInvite, AcceptedShare, BlogEntry } from '../types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
-// ---------- localStorage helpers (remove when using Supabase) ----------
+// ---------- localStorage helpers ----------
 function getSharesKey(userId: string) { return `codelog_shares_${userId}`; }
 function getAcceptedKey(userId: string) { return `codelog_accepted_${userId}`; }
 function getGlobalShareKey(code: string) { return `codelog_invite_${code}`; }
@@ -24,19 +15,54 @@ function generateShareCode(): string {
   }
   return code.slice(0, 4) + '-' + code.slice(4);
 }
+
+// Helper to map DB row to BlogEntry
+function mapRowToEntry(row: any): BlogEntry {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    title: row.title,
+    language: row.language,
+    code: row.code,
+    summary: row.summary,
+    reflection: row.reflection,
+    tags: row.tags || [],
+    date: row.date,
+    createdAt: new Date(row.created_at).getTime(),
+    updatedAt: new Date(row.updated_at).getTime(),
+  };
+}
 // -----------------------------------------------------------------------
 
-/**
- * Fetch all shares created by a user
- *
- * TODO: Replace with Supabase:
- * const { data } = await supabase
- *   .from('shares')
- *   .select('*, share_entries(entry_id)')
- *   .eq('owner_id', userId)
- *   .order('created_at', { ascending: false });
- */
 export async function fetchMyShares(userId: string): Promise<ShareInvite[]> {
+  // ------------------------------------------------------------
+  // 🚀 SUPABASE MODE
+  // ------------------------------------------------------------
+  if (isSupabaseConfigured() && supabase) {
+    const { data, error } = await supabase
+      .from('shares')
+      .select('*, share_entries(entry_id)')
+      .eq('owner_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) return [];
+    
+    return data.map((row: any) => ({
+      id: row.id,
+      code: row.code,
+      ownerId: row.owner_id,
+      ownerName: '', // Not stored on share row, usually joined
+      ownerEmail: '',
+      label: row.label,
+      permission: row.permission,
+      createdAt: new Date(row.created_at).getTime(),
+      entryIds: row.share_entries.map((se: any) => se.entry_id),
+    }));
+  }
+
+  // ------------------------------------------------------------
+  // 💾 LOCALSTORAGE MODE
+  // ------------------------------------------------------------
   try {
     const data = localStorage.getItem(getSharesKey(userId));
     return data ? JSON.parse(data) : [];
@@ -45,16 +71,38 @@ export async function fetchMyShares(userId: string): Promise<ShareInvite[]> {
   }
 }
 
-/**
- * Fetch all shares accepted by a user
- *
- * TODO: Replace with Supabase:
- * const { data } = await supabase
- *   .from('accepted_shares')
- *   .select('*, shares(*, profiles(display_name, email))')
- *   .eq('user_id', userId);
- */
 export async function fetchAcceptedShares(userId: string): Promise<AcceptedShare[]> {
+  // ------------------------------------------------------------
+  // 🚀 SUPABASE MODE
+  // ------------------------------------------------------------
+  if (isSupabaseConfigured() && supabase) {
+    const { data, error } = await supabase
+      .from('accepted_shares')
+      .select(`
+        *,
+        shares (
+          id, code, label,
+          profiles (display_name, email)
+        )
+      `)
+      .eq('user_id', userId);
+
+    if (error) return [];
+
+    return data.map((row: any) => ({
+      shareId: row.share_id,
+      shareCode: row.shares.code,
+      ownerId: row.shares.profiles.id, // Profile ID not directly on accepted_share
+      ownerName: row.shares.profiles.display_name,
+      ownerEmail: row.shares.profiles.email,
+      label: row.shares.label,
+      acceptedAt: new Date(row.accepted_at).getTime(),
+    }));
+  }
+
+  // ------------------------------------------------------------
+  // 💾 LOCALSTORAGE MODE
+  // ------------------------------------------------------------
   try {
     const data = localStorage.getItem(getAcceptedKey(userId));
     return data ? JSON.parse(data) : [];
@@ -63,20 +111,6 @@ export async function fetchAcceptedShares(userId: string): Promise<AcceptedShare
   }
 }
 
-/**
- * Create a new share invite
- *
- * TODO: Replace with Supabase:
- * const code = generateShareCode();
- * const { data: share } = await supabase
- *   .from('shares')
- *   .insert({ code, owner_id: userId, label, permission: 'view' })
- *   .select()
- *   .single();
- * await supabase.from('share_entries').insert(
- *   entryIds.map(id => ({ share_id: share.id, entry_id: id }))
- * );
- */
 export async function createShareInvite(
   userId: string,
   ownerName: string,
@@ -86,6 +120,50 @@ export async function createShareInvite(
   entries: BlogEntry[]
 ): Promise<ShareInvite> {
   const code = generateShareCode();
+
+  // ------------------------------------------------------------
+  // 🚀 SUPABASE MODE
+  // ------------------------------------------------------------
+  if (isSupabaseConfigured() && supabase) {
+    // 1. Create Share
+    const { data: share, error } = await supabase
+      .from('shares')
+      .insert({
+        code,
+        owner_id: userId,
+        label,
+        permission: 'view',
+      })
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+
+    // 2. Link Entries
+    if (entryIds.length > 0) {
+      const { error: linkError } = await supabase
+        .from('share_entries')
+        .insert(entryIds.map(id => ({ share_id: share.id, entry_id: id })));
+      
+      if (linkError) throw new Error(linkError.message);
+    }
+
+    return {
+      id: share.id,
+      code,
+      ownerId: userId,
+      ownerName, 
+      ownerEmail,
+      label,
+      permission: 'view',
+      createdAt: Date.now(),
+      entryIds,
+    };
+  }
+
+  // ------------------------------------------------------------
+  // 💾 LOCALSTORAGE MODE
+  // ------------------------------------------------------------
   const invite: ShareInvite = {
     id: uuidv4(),
     code,
@@ -98,11 +176,9 @@ export async function createShareInvite(
     label: label || 'Shared entries',
   };
 
-  // Store globally so other users can find it
   const sharedEntries = entries.filter(e => entryIds.includes(e.id));
   localStorage.setItem(getGlobalShareKey(code), JSON.stringify({ invite, entries: sharedEntries }));
 
-  // Store in user's shares list
   const myShares = await fetchMyShares(userId);
   myShares.push(invite);
   localStorage.setItem(getSharesKey(userId), JSON.stringify(myShares));
@@ -110,14 +186,18 @@ export async function createShareInvite(
   return invite;
 }
 
-/**
- * Revoke a share
- *
- * TODO: Replace with Supabase:
- * await supabase.from('shares').delete().eq('id', shareId).eq('owner_id', userId);
- * (cascade will delete share_entries and accepted_shares)
- */
 export async function revokeShare(userId: string, shareId: string): Promise<void> {
+  // ------------------------------------------------------------
+  // 🚀 SUPABASE MODE
+  // ------------------------------------------------------------
+  if (isSupabaseConfigured() && supabase) {
+    await supabase.from('shares').delete().eq('id', shareId).eq('owner_id', userId);
+    return;
+  }
+
+  // ------------------------------------------------------------
+  // 💾 LOCALSTORAGE MODE
+  // ------------------------------------------------------------
   const myShares = await fetchMyShares(userId);
   const share = myShares.find(s => s.id === shareId);
   if (share) {
@@ -127,27 +207,55 @@ export async function revokeShare(userId: string, shareId: string): Promise<void
   localStorage.setItem(getSharesKey(userId), JSON.stringify(updated));
 }
 
-/**
- * Accept an invite by code
- *
- * TODO: Replace with Supabase:
- * const { data: share } = await supabase
- *   .from('shares')
- *   .select('*, profiles(display_name, email)')
- *   .eq('code', code)
- *   .single();
- * if (!share) return { success: false, error: 'Invalid code' };
- * if (share.owner_id === userId) return { success: false, error: "Can't accept own share" };
- * const { error } = await supabase
- *   .from('accepted_shares')
- *   .insert({ share_id: share.id, user_id: userId });
- */
 export async function acceptInvite(
   userId: string,
   code: string
 ): Promise<{ success: boolean; accepted?: AcceptedShare; error?: string }> {
   const normalizedCode = code.toUpperCase().trim();
 
+  // ------------------------------------------------------------
+  // 🚀 SUPABASE MODE
+  // ------------------------------------------------------------
+  if (isSupabaseConfigured() && supabase) {
+    // 1. Find the share
+    const { data: share, error: findError } = await supabase
+      .from('shares')
+      .select('*, profiles(display_name, email)')
+      .eq('code', normalizedCode)
+      .single();
+
+    if (findError || !share) return { success: false, error: 'Invalid code' };
+    if (share.owner_id === userId) return { success: false, error: "Can't accept own share" };
+
+    // 2. Insert acceptance
+    const { error: acceptError } = await supabase
+      .from('accepted_shares')
+      .insert({ share_id: share.id, user_id: userId });
+
+    if (acceptError) {
+      if (acceptError.code === '23505') { // Unique violation
+        return { success: false, error: 'You have already accepted this invite.' };
+      }
+      return { success: false, error: acceptError.message };
+    }
+
+    return {
+      success: true,
+      accepted: {
+        shareId: share.id,
+        shareCode: share.code,
+        ownerId: share.owner_id,
+        ownerName: share.profiles.display_name,
+        ownerEmail: share.profiles.email,
+        label: share.label,
+        acceptedAt: Date.now(),
+      }
+    };
+  }
+
+  // ------------------------------------------------------------
+  // 💾 LOCALSTORAGE MODE
+  // ------------------------------------------------------------
   const accepted = await fetchAcceptedShares(userId);
   if (accepted.some(s => s.shareCode === normalizedCode)) {
     return { success: false, error: 'You have already accepted this invite.' };
@@ -184,18 +292,33 @@ export async function acceptInvite(
   }
 }
 
-/**
- * Get shared entries for a specific share code
- *
- * TODO: Replace with Supabase:
- * const { data: share } = await supabase
- *   .from('shares')
- *   .select('share_entries(entries(*))')
- *   .eq('code', code)
- *   .single();
- * return share.share_entries.map(se => mapRowToEntry(se.entries));
- */
 export async function getSharedEntries(code: string): Promise<BlogEntry[]> {
+  // ------------------------------------------------------------
+  // 🚀 SUPABASE MODE
+  // ------------------------------------------------------------
+  if (isSupabaseConfigured() && supabase) {
+    // Query goes through shares -> share_entries -> entries
+    const { data, error } = await supabase
+      .from('shares')
+      .select(`
+        share_entries (
+          entries (*)
+        )
+      `)
+      .eq('code', code)
+      .single();
+
+    if (error || !data) return [];
+    
+    // Flatten structure
+    return data.share_entries
+      .map((se: any) => se.entries ? mapRowToEntry(se.entries) : null)
+      .filter((e: any) => e !== null);
+  }
+
+  // ------------------------------------------------------------
+  // 💾 LOCALSTORAGE MODE
+  // ------------------------------------------------------------
   try {
     const globalData = localStorage.getItem(getGlobalShareKey(code));
     if (!globalData) return [];
@@ -206,30 +329,48 @@ export async function getSharedEntries(code: string): Promise<BlogEntry[]> {
   }
 }
 
-/**
- * Remove an accepted share
- *
- * TODO: Replace with Supabase:
- * await supabase
- *   .from('accepted_shares')
- *   .delete()
- *   .eq('share_id', shareId)
- *   .eq('user_id', userId);
- */
 export async function removeAcceptedShare(userId: string, shareCode: string): Promise<void> {
+  // ------------------------------------------------------------
+  // 🚀 SUPABASE MODE
+  // ------------------------------------------------------------
+  if (isSupabaseConfigured() && supabase) {
+    // Need to find share ID first from code
+    const { data: share } = await supabase
+      .from('shares')
+      .select('id')
+      .eq('code', shareCode)
+      .single();
+      
+    if (share) {
+      await supabase
+        .from('accepted_shares')
+        .delete()
+        .eq('share_id', share.id)
+        .eq('user_id', userId);
+    }
+    return;
+  }
+
+  // ------------------------------------------------------------
+  // 💾 LOCALSTORAGE MODE
+  // ------------------------------------------------------------
   const accepted = await fetchAcceptedShares(userId);
   const updated = accepted.filter(s => s.shareCode !== shareCode);
   localStorage.setItem(getAcceptedKey(userId), JSON.stringify(updated));
 }
 
-/**
- * Refresh shared entry data when source entries change
- *
- * TODO: With Supabase this is automatic since share_entries references
- * the entries table. You can use Supabase Realtime to listen for changes.
- * This function becomes a no-op.
- */
 export async function refreshShareData(userId: string, entries: BlogEntry[]): Promise<void> {
+  // ------------------------------------------------------------
+  // 🚀 SUPABASE MODE
+  // ------------------------------------------------------------
+  if (isSupabaseConfigured()) {
+    // No-op for Supabase; data is relational and always fresh
+    return;
+  }
+
+  // ------------------------------------------------------------
+  // 💾 LOCALSTORAGE MODE
+  // ------------------------------------------------------------
   const myShares = await fetchMyShares(userId);
   myShares.forEach(share => {
     const sharedEntries = entries.filter(e => share.entryIds.includes(e.id));
